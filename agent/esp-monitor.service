@@ -1,0 +1,14 @@
+[Unit]
+Description=Monitor Linux - Agente ESP32 CYD
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/tartaruga/Sources/esp_monitor
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/tartaruga/Sources/esp_monitor/venv/bin/python3 /home/tartaruga/Sources/esp_monitor/agent/monitor_agent.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

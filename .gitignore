@@ -1,0 +1,9 @@
+.pio/
+.vscode/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+*.bak
+.DS_Store
