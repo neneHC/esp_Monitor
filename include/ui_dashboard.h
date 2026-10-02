@@ -71,6 +71,8 @@ private:
   LGFX_CYD& _lcd;
   LGFX_Sprite _cardSprite;
   LGFX_Sprite _headerSprite;
+  LGFX_Sprite _rowSprite;
+  bool _detailsFrameDrawn;
   uint8_t _currentView; // 0 = Dashboard 2x2, 1 = Detalhes do Hardware
   uint8_t _brightnessLevel; // 0 = Dim, 1 = Low, 2 = Med, 3 = High
   const uint8_t _brightnessValues[4] = { BRIGHTNESS_DIM, BRIGHTNESS_LOW, BRIGHTNESS_MED, BRIGHTNESS_HIGH };
@@ -108,7 +110,7 @@ private:
 
 public:
   UIDashboard(LGFX_CYD& lcd) 
-    : _lcd(lcd), _cardSprite(&lcd), _headerSprite(&lcd), _currentView(0), _brightnessLevel(3) {}
+    : _lcd(lcd), _cardSprite(&lcd), _headerSprite(&lcd), _rowSprite(&lcd), _detailsFrameDrawn(false), _currentView(0), _brightnessLevel(3) {}
 
   void begin() {
     _lcd.init();
@@ -122,6 +124,9 @@ public:
 
     _headerSprite.setColorDepth(16);
     _headerSprite.createSprite(320, 24);
+
+    _rowSprite.setColorDepth(16);
+    _rowSprite.createSprite(280, 18);
   }
 
   void cycleBrightness() {
@@ -147,6 +152,7 @@ public:
 
   void toggleView() {
     _currentView = (_currentView == 0) ? 1 : 0;
+    _detailsFrameDrawn = false;
     _lcd.fillScreen(COLOR_BG);
   }
 
@@ -203,6 +209,7 @@ public:
   //  TELA DE ESPERA / AGUARDANDO PC
   // =======================================================================
   void drawWaitingScreen(const String& infoMsg) {
+    _detailsFrameDrawn = false;
     drawHeader({ "", "", 0, 0, 0, "", 0, 0, 0, 0, 0, 0, 0, 0, 0, false, false, "", 0, 0 });
 
     _lcd.fillRect(10, 34, 300, 196, COLOR_BG);
@@ -419,6 +426,7 @@ public:
   //  DESENHO DO PAINEL PRINCIPAL (DASHBOARD 2x2)
   // =======================================================================
   void drawDashboard(const SystemStats& stats) {
+    _detailsFrameDrawn = false;
     drawHeader(stats);
 
     // Posições dos 4 cartões
@@ -439,25 +447,35 @@ public:
   void drawDetailsView(const SystemStats& stats) {
     drawHeader(stats);
 
-    _lcd.fillRoundRect(10, 30, 300, 202, 8, COLOR_CARD_BG);
-    _lcd.drawRoundRect(10, 30, 300, 202, 8, COLOR_CARD_BORDER);
+    // Desenha o quadro e os títulos estáticos apenas uma vez ao entrar na tela
+    if (!_detailsFrameDrawn) {
+      _lcd.fillRoundRect(10, 30, 300, 202, 8, COLOR_CARD_BG);
+      _lcd.drawRoundRect(10, 30, 300, 202, 8, COLOR_CARD_BORDER);
 
-    _lcd.setTextColor(COLOR_TEXT_WHITE, COLOR_CARD_BG);
-    _lcd.setFont(&fonts::Font2);
-    _lcd.drawString("Informacoes do Sistema", 20, 38);
+      _lcd.setTextColor(COLOR_TEXT_WHITE, COLOR_CARD_BG);
+      _lcd.setFont(&fonts::Font2);
+      _lcd.drawString("Informacoes do Sistema", 20, 38);
 
-    _lcd.setFont(&fonts::Font0);
-    _lcd.setTextSize(1);
-    _lcd.setTextColor(COLOR_TEXT_MUTED, COLOR_CARD_BG);
-    _lcd.drawString("Toque na tela para voltar ao Dashboard", 20, 56);
-    _lcd.drawFastHLine(20, 68, 280, COLOR_CARD_BORDER);
+      _lcd.setFont(&fonts::Font0);
+      _lcd.setTextSize(1);
+      _lcd.setTextColor(COLOR_TEXT_MUTED, COLOR_CARD_BG);
+      _lcd.drawString("Toque na tela para voltar ao Dashboard", 20, 56);
+      _lcd.drawFastHLine(20, 68, 280, COLOR_CARD_BORDER);
+      _detailsFrameDrawn = true;
+    }
 
+    // Cada linha dinâmica é renderizada no buffer _rowSprite em memória
+    // e enviada por DMA, eliminando 100% das piscadas/flicker!
     int y = 76;
     auto drawDetailLine = [&](const char* label, const String& val, uint16_t valColor = COLOR_TEXT_WHITE) {
-      _lcd.setTextColor(COLOR_TEXT_MUTED, COLOR_CARD_BG);
-      _lcd.drawString(label, 20, y);
-      _lcd.setTextColor(valColor, COLOR_CARD_BG);
-      _lcd.drawRightString(val.c_str(), 300, y);
+      _rowSprite.fillSprite(COLOR_CARD_BG);
+      _rowSprite.setFont(&fonts::Font0);
+      _rowSprite.setTextSize(1);
+      _rowSprite.setTextColor(COLOR_TEXT_MUTED, COLOR_CARD_BG);
+      _rowSprite.drawString(label, 0, 3);
+      _rowSprite.setTextColor(valColor, COLOR_CARD_BG);
+      _rowSprite.drawRightString(val.c_str(), 280, 3);
+      _rowSprite.pushSprite(&_lcd, 20, y);
       y += 18;
     };
 

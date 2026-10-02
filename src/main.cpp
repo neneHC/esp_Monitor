@@ -23,6 +23,7 @@ unsigned long lastTouchCheckMs = 0;
 unsigned long touchStartTime = 0;
 bool touchWasPressed = false;
 bool displayInverted = DEFAULT_COLOR_INVERT;
+bool needsRedraw = false;
 
 // =========================================================================
 //  PARSER DE JSON (Recebido via Serial USB ou HTTP Wi-Fi)
@@ -80,6 +81,7 @@ bool parseJsonPayload(const String& jsonStr, bool fromUsb) {
   stats.connected = true;
   stats.isUsb = fromUsb;
   stats.lastUpdateMs = millis();
+  needsRedraw = true;
 
   return true;
 }
@@ -193,8 +195,10 @@ void handleTouch() {
         // Metade inferior da tela = Cicla o Brilho da Tela (100% -> 70% -> 35% -> 10%)
         if (y < 120) {
           ui.toggleView();
+          needsRedraw = true;
         } else {
           ui.cycleBrightness();
+          needsRedraw = true;
         }
       }
     }
@@ -258,19 +262,24 @@ void loop() {
   if (stats.connected && (now - stats.lastUpdateMs > SERIAL_TIMEOUT_MS)) {
     stats.connected = false;
     ui.drawWaitingScreen("Conexao perdida. Reconectando...");
+    needsRedraw = false;
   }
 
-  // 5. Atualização visual e LED
-  static unsigned long lastRenderMs = 0;
-  if (now - lastRenderMs >= 250) {
-    lastRenderMs = now;
-
-    // Atualiza o LED RGB baseado na carga máxima e temperaturas
+  // 5. Atualização do LED RGB (atualizado a cada 200ms para suavidade/piscar)
+  static unsigned long lastLedMs = 0;
+  if (now - lastLedMs >= 200) {
+    lastLedMs = now;
     float maxLoad = max(stats.cpuUsage, max((float)stats.gpuUsage, stats.ramPercent));
     float maxTemp = max(stats.cpuTemp, max(stats.gpuTemp, stats.ssdTemp));
     leds.update(maxLoad, maxTemp, stats.connected);
+  }
 
-    // Se conectado, renderiza a tela ativa
+  // 6. Atualização visual da tela (somente quando novos dados chegam ou na interação)
+  static unsigned long lastRenderMs = 0;
+  if (needsRedraw || (stats.connected && (now - lastRenderMs >= 1000))) {
+    lastRenderMs = now;
+    needsRedraw = false;
+
     if (stats.connected) {
       if (ui.getView() == 0) {
         ui.drawDashboard(stats);
